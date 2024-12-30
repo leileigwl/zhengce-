@@ -23,32 +23,15 @@ def get_today_and_yesterday():
     yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
     return today, yesterday
 
-# 爬取北极星电力网政策信息
+# 爬取新能源网政策信息
 def fetch_policy_info(page_id, token):
-    url = "https://api.notion.com/v1/databases/{}/query".format(page_id)
+    url = "http://www.china-nengyuan.com/news/news_list_6.html"
     
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-        "Notion-Version": "2022-06-28",
-        "Authorization": "Bearer " + token
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
     }
     
-    # 获取已录入的政策信息
-    existing_policies = []
-    response = requests.post(url, headers=headers)
-    if response.status_code == 200:
-        data = response.json()
-        for result in data.get("results", []):
-            title_property = result['properties']['标题']['title']
-            # 检查标题是否存在且不为空
-            if title_property and len(title_property) > 0:
-                title = title_property[0]['text']['content']
-                existing_policies.append(title)
-    else:
-        print("获取已录入政策信息失败，状态码:", response.status_code)
-
     # 爬取新的政策信息
-    url = "https://news.bjx.com.cn/zc/"
     response = requests.get(url, headers=headers)
     
     if response.status_code != 200:
@@ -56,12 +39,12 @@ def fetch_policy_info(page_id, token):
         return []
 
     soup = BeautifulSoup(response.text, 'html.parser')
-    articles = soup.find_all('div', class_='cc-list-content')  # 根据实际的 HTML 结构调整
+    print(soup.prettify())  # 打印爬取到的 HTML 内容，便于调试
     policies = []
     
     today, yesterday = get_today_and_yesterday()  # 获取今天和昨天的日期
     
-    # 定义关键词和对应的领域
+    # 定义关键词
     keywords = {
         # 各省份
         "北京": "地方",
@@ -160,8 +143,8 @@ def fetch_policy_info(page_id, token):
         # 政策层级
         "国家级": "政策层级",
         "省级": "政策层级",
-        "市级": "政策层级",
         "新能源汽车": "政策层级",
+        "市级": "政策层级",
         "县级": "政策层级",
         "地方政府": "政策层级",
         "中央政府": "政策层级",
@@ -188,30 +171,27 @@ def fetch_policy_info(page_id, token):
         "环境治理": "政策",
     }
 
-    for article in articles:
-        items = article.find_all('li')  # 假设每个政策信息在 <li> 标签中
-        for item in items:
-            title = item.find('a').text.strip()
-            link = item.find('a')['href']
-            date = item.find('span').text.strip()
+    # 查找所有政策信息行
+    rows = soup.find_all('tr', class_='member_tr_row')
+    for row in rows:
+        title_tag = row.find('a')
+        if title_tag:
+            title = title_tag.text.strip()
+            link = "http://www.china-nengyuan.com" + title_tag['href']  # 补充完整链接
+            date = row.find_all('td')[-1].text.strip()  # 获取最后一个 <td> 中的日期
 
-            # 判断领域
-            field = "其他"  # 默认值
-            for keyword, category in keywords.items():
-                if keyword in title:
-                    field = category
-                    break
+            # 提取关键词
+            extracted_keywords = [keyword for keyword in keywords if keyword in title]
 
-            # 仅录入今天和昨天的内容，并检查是否已存在
-            if date in (today, yesterday) and title not in existing_policies:
+            # 仅录入今天和昨天的内容
+            if date in (today, yesterday):
                 policies.append({
                     '标题': title,
                     '链接': link,
                     '日期': date,
-                    '领域': field,  # 新增字段
-                    '关键词': ', '.join([keyword for keyword in keywords if keyword in title])  # 提取关键词
+                    '关键词': ', '.join(extracted_keywords)  # 只保留关键词
                 })
-    
+
     return policies
 
 # 将政策信息导入 Notion
@@ -253,10 +233,8 @@ def import_to_notion(policies, page_id, token):
 
 # 主函数
 if __name__ == '__main__':
-    # 读取配置
     page_id, token = read_config("config.txt")  # 假设配置文件名为 config.txt
     policies = fetch_policy_info(page_id, token)
     import_to_notion(policies, page_id, token)
 
-    # 在每次请求之间添加延迟
     time.sleep(2)  # 延迟 2 秒

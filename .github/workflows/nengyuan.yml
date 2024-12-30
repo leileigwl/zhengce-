@@ -1,0 +1,26 @@
+name: Run Nengyuan Scraper
+
+on:
+  schedule:
+    - cron: '30 9 * * *'  # 每天 14:40 运行一次
+  workflow_dispatch:  # 允许手动触发
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.8'  # 使用您需要的 Python 版本
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests beautifulsoup4  # 安装所需的库
+
+      - name: Run script
+        run: python nengyuan.py  # 替换为您的脚本名称
