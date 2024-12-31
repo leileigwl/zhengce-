@@ -2,7 +2,7 @@ name: Run Python Script
 
 on:
   schedule:
-    - cron: '30 9 * * *'  # 每天 17:30 UTC 运行（中国时间 01:30）
+    - cron: '0 10,16,22 * * *'  # 每天 10:00、16:00 和 22:00 UTC 运行
   workflow_dispatch:  # 允许手动触发
 
 jobs:

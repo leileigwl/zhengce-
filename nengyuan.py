@@ -17,6 +17,31 @@ def read_config(file_path):
         print("当前工作目录:", os.getcwd())  # 打印当前工作目录
         sys.exit(1)  # 退出程序
 
+# 获取已录入的政策信息
+def fetch_existing_policies(page_id, token):
+    url = f"https://api.notion.com/v1/databases/{page_id}/query"
+    
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+        "Notion-Version": "2022-06-28",
+        "Authorization": "Bearer " + token
+    }
+    
+    existing_policies = []
+    response = requests.post(url, headers=headers)
+    if response.status_code == 200:
+        data = response.json()
+        for result in data.get("results", []):
+            title_property = result['properties']['标题']['title']
+            # 检查标题是否存在且不为空
+            if title_property and len(title_property) > 0:
+                title = title_property[0]['text']['content']
+                existing_policies.append(title)
+    else:
+        print("获取已录入政策信息失败，状态码:", response.status_code)
+
+    return existing_policies
+
 # 获取今天和昨天的日期
 def get_today_and_yesterday():
     today = datetime.now().strftime("%Y-%m-%d")
@@ -31,6 +56,9 @@ def fetch_policy_info(page_id, token):
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
     }
     
+    # 获取已录入的政策信息
+    existing_policies = fetch_existing_policies(page_id, token)
+
     # 爬取新的政策信息
     response = requests.get(url, headers=headers)
     
@@ -184,7 +212,7 @@ def fetch_policy_info(page_id, token):
             extracted_keywords = [keyword for keyword in keywords if keyword in title]
 
             # 仅录入今天和昨天的内容
-            if date in (today, yesterday):
+            if date in (today, yesterday) and title not in existing_policies:
                 policies.append({
                     '标题': title,
                     '链接': link,
@@ -198,22 +226,18 @@ def fetch_policy_info(page_id, token):
 def import_to_notion(policies, page_id, token):
     url = "https://api.notion.com/v1/pages"
     
-    # 打印爬取到的内容
     print("爬取到的政策信息:")
     for policy in policies:
         print(f"标题: {policy['标题']}, 链接: {policy['链接']}, 日期: {policy['日期']}, 关键词: {policy['关键词']}")
 
     for policy in policies:
-        # 将关键词转换为 multi_select 格式
-        keywords_list = [{'name': keyword} for keyword in policy['关键词'].split(', ') if keyword]
-
         p = {
             "parent": {"database_id": page_id},
             "properties": {
                 "标题": {"title": [{"type": "text", "text": {"content": policy['标题']}}]},
                 "链接": {"url": policy['链接']},
                 "日期": {"date": {"start": policy['日期']}},
-                "关键词": {"multi_select": keywords_list}  # 使用 multi_select 格式
+                "关键词": {"multi_select": [{'name': keyword} for keyword in policy['关键词'].split(', ') if keyword]}  # 使用 multi_select 格式
             }
         }
 
